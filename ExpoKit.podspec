@@ -3,14 +3,14 @@
 
 Pod::Spec.new do |s|
   s.name = "ExpoKit"
-  s.version = "2.7.0"
+  s.version = "2.9.0"
   s.summary = 'ExpoKit'
   s.description = 'ExpoKit allows native projects to integrate with the Expo SDK.'
   s.homepage = 'http://docs.expo.io'
-  s.license = 'BSD'
+  s.license = 'MIT'
   s.author = "650 Industries, Inc."
   s.requires_arc = true
-  s.platform = :ios, "9.0"
+  s.platform = :ios, "10.0"
   s.default_subspec = "Core"
   s.source = { :git => "http://github.com/expo/expo.git" }
 
@@ -25,15 +25,14 @@ Pod::Spec.new do |s|
     ss.dependency 'CocoaLumberjack', '~> 3.2.1'
     ss.dependency 'Crashlytics', '~> 3.8'
     ss.dependency 'FBAudienceNetwork', '4.99.0'
-    ss.dependency 'FBSDKCoreKit', '~> 4.28'
-    ss.dependency 'FBSDKLoginKit', '~> 4.28'
-    ss.dependency 'FBSDKShareKit', '~> 4.28'
+    ss.dependency 'FBSDKCoreKit', '4.37.0'
+    ss.dependency 'FBSDKLoginKit', '4.37.0'
+    ss.dependency 'FBSDKShareKit', '4.37.0'
     ss.dependency 'Fabric', '~> 1.6'
-    ss.dependency 'GoogleSignIn', '~> 3.0'
+    ss.dependency 'GoogleSignIn', '~> 4.1'
     ss.dependency 'GoogleMaps', '~> 2.5.0'
     ss.dependency 'Google-Maps-iOS-Utils', '~> 2.1.0'
     ss.dependency 'lottie-ios', '~> 2.5.0'
-    ss.dependency 'GPUImage', '~> 0.1.7'
     ss.dependency 'JKBigInteger2', '0.0.5'
     ss.dependency 'Branch', '~> 0.24.2'
     ss.dependency 'Google-Mobile-Ads-SDK', '~> 7.22.0'

@@ -16,7 +16,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import com.amplitude.api.Amplitude;
 import com.facebook.infer.annotation.Assertions;
 import com.facebook.react.common.MapBuilder;
 import com.facebook.react.devsupport.DoubleTapReloadRecognizer;
@@ -25,7 +24,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +95,10 @@ public abstract class ReactNativeActivity extends FragmentActivity implements co
   protected String mSDKVersion;
   protected int mActivityId;
 
+  // In detach we want UNVERSIONED most places. We still need the numbered sdk version
+  // when creating cache keys.
+  protected String mDetachSdkVersion;
+
   protected RNObject mReactRootView;
   private FrameLayout mLayout;
   private FrameLayout mContainer;
@@ -135,7 +137,7 @@ public abstract class ReactNativeActivity extends FragmentActivity implements co
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
+    super.onCreate(null);
 
     mLayout = new FrameLayout(this);
     setContentView(mLayout);
@@ -245,11 +247,14 @@ public abstract class ReactNativeActivity extends FragmentActivity implements co
       ViewGroup.LayoutParams layoutParams = mContainer.getLayoutParams();
       layoutParams.height = mLayout.getHeight();
       mContainer.setLayoutParams(layoutParams);
-    } else {
+    }
+
+    if (mLoadingView != null && mLoadingView.getParent() == mLayout) {
       mLoadingView.setAlpha(0.0f);
       mLoadingView.setShowIcon(false);
       mLoadingView.setDoneLoading();
     }
+
     mSplashScreenKernelService.reset();
     mIsLoading = false;
     mLoadingHandler.removeCallbacksAndMessages(null);
@@ -551,7 +556,7 @@ public abstract class ReactNativeActivity extends FragmentActivity implements co
         eventProperties.put(Analytics.USER_ERROR_MESSAGE, errorMessage.userErrorMessage());
         eventProperties.put(Analytics.DEVELOPER_ERROR_MESSAGE, errorMessage.developerErrorMessage());
         eventProperties.put(Analytics.MANIFEST_URL, mManifestUrl);
-        Amplitude.getInstance().logEvent(Analytics.ERROR_RELOADED, eventProperties);
+        Analytics.logEvent(Analytics.ERROR_RELOADED, eventProperties);
       } catch (Exception e) {
         EXL.e(TAG, e.getMessage());
       }
@@ -578,15 +583,17 @@ public abstract class ReactNativeActivity extends FragmentActivity implements co
     }
 
     try {
-      Set<KernelConstants.ExperienceEvent> events = KernelProvider.getInstance().consumeExperienceEvents(mManifestUrl);
+      RNObject rctDeviceEventEmitter = new RNObject("com.facebook.react.modules.core.DeviceEventManagerModule$RCTDeviceEventEmitter");
+      rctDeviceEventEmitter.loadVersion(mDetachSdkVersion);
+      RNObject existingEmitter = mReactInstanceManager.callRecursive("getCurrentReactContext")
+          .callRecursive("getJSModule", rctDeviceEventEmitter.rnClass());
 
-      for (KernelConstants.ExperienceEvent event : events) {
-        RNObject rctDeviceEventEmitter = new RNObject("com.facebook.react.modules.core.DeviceEventManagerModule$RCTDeviceEventEmitter");
-        rctDeviceEventEmitter.loadVersion(mSDKVersion);
+      if (existingEmitter != null) {
+        Set<KernelConstants.ExperienceEvent> events = KernelProvider.getInstance().consumeExperienceEvents(mManifestUrl);
 
-        mReactInstanceManager.callRecursive("getCurrentReactContext")
-            .callRecursive("getJSModule", rctDeviceEventEmitter.rnClass())
-            .call("emit", event.eventName, event.eventPayload);
+        for (KernelConstants.ExperienceEvent event : events) {
+          existingEmitter.call("emit", event.eventName, event.eventPayload);
+        }
       }
     } catch (Throwable e) {
       EXL.e(TAG, e);

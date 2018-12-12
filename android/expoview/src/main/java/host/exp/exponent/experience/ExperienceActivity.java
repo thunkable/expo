@@ -20,7 +20,6 @@ import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.widget.RemoteViews;
 
-import com.amplitude.api.Amplitude;
 import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.UiThreadUtil;
@@ -40,7 +39,6 @@ import javax.inject.Inject;
 
 import de.greenrobot.event.EventBus;
 import expo.core.interfaces.Package;
-import expo.modules.facedetector.FaceDetectorPackage;
 import host.exp.exponent.ABIVersion;
 import host.exp.exponent.AppLoader;
 import host.exp.exponent.Constants;
@@ -115,10 +113,6 @@ public class ExperienceActivity extends BaseExperienceActivity implements Expone
   private NotificationCompat.Builder mNotificationBuilder;
   private boolean mIsLoadExperienceAllowedToRun = false;
   private boolean mShouldShowLoadingScreenWithOptimisticManifest = false;
-
-  // In detach we want UNVERSIONED most places. We still need the numbered sdk version
-  // when creating cache keys.
-  private String mDetachSdkVersion;
 
   @Inject
   ExponentManifest mExponentManifest;
@@ -269,14 +263,7 @@ public class ExperienceActivity extends BaseExperienceActivity implements Expone
 
   public void soloaderInit() {
     if (mDetachSdkVersion != null) {
-      try {
-        new RNObject("com.facebook.soloader.SoLoader")
-            .loadVersion(mDetachSdkVersion)
-            .callStatic("init", this, false);
-      } catch (Throwable e) {
-        // Starting with SDK 8, SoLoader moved out into a library, so it isn't versioned anymore
-        SoLoader.init(this, false);
-      }
+      SoLoader.init(this, false);
     }
   }
 
@@ -769,7 +756,7 @@ public class ExperienceActivity extends BaseExperienceActivity implements Expone
         );
         kernelReactInstanceManager.onHostResume(ExperienceActivity.this, ExperienceActivity.this);
         addView(mNuxOverlayView);
-        Amplitude.getInstance().logEvent("NUX_EXPERIENCE_OVERLAY_SHOWN");
+        Analytics.logEvent("NUX_EXPERIENCE_OVERLAY_SHOWN");
       }
     });
   }
@@ -807,7 +794,7 @@ public class ExperienceActivity extends BaseExperienceActivity implements Expone
               } catch (JSONException e) {
                 EXL.e(TAG, e.getMessage());
               }
-              Amplitude.getInstance().logEvent("NUX_EXPERIENCE_OVERLAY_DISMISSED", eventProperties);
+              Analytics.logEvent("NUX_EXPERIENCE_OVERLAY_DISMISSED", eventProperties);
             }
 
             public void onAnimationRepeat(Animation animation) {
@@ -870,5 +857,9 @@ public class ExperienceActivity extends BaseExperienceActivity implements Expone
     } catch (JSONException e) {
       e.printStackTrace();
     }
+  }
+
+  public String getExperienceId() {
+    return mExperienceIdString;
   }
 }

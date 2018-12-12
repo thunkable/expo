@@ -13,7 +13,7 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
-import com.facebook.infer.annotation.Assertions;
+import expolib_v1.com.facebook.infer.annotation.Assertions;
 import com.facebook.react.bridge.queue.MessageQueueThread;
 import com.facebook.react.bridge.queue.ReactQueueConfiguration;
 import com.facebook.react.common.LifecycleState;
@@ -349,4 +349,5 @@ public class ReactContext extends ContextWrapper {
   public JavaScriptContextHolder getJavaScriptContextHolder() {
     return mCatalystInstance.getJavaScriptContextHolder();
   }
+
 }

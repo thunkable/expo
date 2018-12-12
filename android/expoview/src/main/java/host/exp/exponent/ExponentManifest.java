@@ -12,8 +12,6 @@ import android.os.Debug;
 import android.util.Log;
 import android.util.LruCache;
 
-import com.amplitude.api.Amplitude;
-
 import expolib_v1.okhttp3.CacheControl;
 import host.exp.exponent.analytics.Analytics;
 import host.exp.exponent.analytics.EXL;
@@ -29,12 +27,10 @@ import host.exp.exponent.network.ExponentNetwork;
 import host.exp.exponent.storage.ExponentSharedPreferences;
 import host.exp.exponent.utils.ColorParser;
 import host.exp.expoview.R;
-import expolib_v1.okhttp3.Call;
-import expolib_v1.okhttp3.Headers;
 import expolib_v1.okhttp3.Request;
-import expolib_v1.okhttp3.Response;
 
 import org.apache.commons.io.IOUtils;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -45,6 +41,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -84,7 +82,9 @@ public class ExponentManifest {
   public static final String MANIFEST_SHOW_EXPONENT_NOTIFICATION_KEY = "androidShowExponentNotificationInShellApp";
   public static final String MANIFEST_REVISION_ID_KEY = "revisionId";
   public static final String MANIFEST_PUBLISHED_TIME_KEY = "publishedTime";
+  public static final String MANIFEST_COMMIT_TIME_KEY = "commitTime";
   public static final String MANIFEST_LOADED_FROM_CACHE_KEY = "loadedFromCache";
+  public static final String MANIFEST_SLUG = "slug";
 
   // Statusbar
   public static final String MANIFEST_STATUS_BAR_KEY = "androidStatusBar";
@@ -175,13 +175,11 @@ public class ExponentManifest {
       //    android:pathPattern=".*"
       //    android:scheme="https"/>
       // so we have to add some special logic to handle that. This is than handling arbitrary HTTP 301s and 302
-      // because we need to add /index.exp to the paths.
       realManifestUrl = Uri.decode(realManifestUrl.substring(realManifestUrl.indexOf(REDIRECT_SNIPPET) + REDIRECT_SNIPPET.length()));
     }
 
     String httpManifestUrl = ExponentUrls.toHttp(realManifestUrl);
 
-    // Append index.exp to path
     Uri uri = Uri.parse(httpManifestUrl);
     String newPath = uri.getPath();
     if (newPath == null) {
@@ -191,11 +189,6 @@ public class ExponentManifest {
     if (deepLinkIndex > -1) {
       newPath = newPath.substring(0, deepLinkIndex);
     }
-    if (!newPath.endsWith("/")) {
-      newPath += "/";
-    }
-    newPath += "index.exp";
-
     return uri.buildUpon().encodedPath(newPath);
   }
 
@@ -216,7 +209,7 @@ public class ExponentManifest {
     String httpManifestUrl = uriBuilder.build().toString();
 
     // Fetch manifest
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL), false);
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
     requestBuilder.cacheControl(CacheControl.FORCE_NETWORK);
@@ -246,6 +239,8 @@ public class ExponentManifest {
         } catch (JSONException e) {
           listener.onError(e);
         } catch (IOException e) {
+          listener.onError(e);
+        } catch (URISyntaxException e) {
           listener.onError(e);
         }
       }
@@ -295,7 +290,7 @@ public class ExponentManifest {
     }
 
     // Fetch manifest
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL), false);
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
 
@@ -380,6 +375,8 @@ public class ExponentManifest {
             listener.onError(e);
           } catch (IOException e) {
             listener.onError(e);
+          } catch (URISyntaxException e) {
+            listener.onError(e);
           }
         }
 
@@ -407,7 +404,7 @@ public class ExponentManifest {
   public void fetchEmbeddedManifest(final String manifestUrl, final ManifestListener listener) {
     String httpManifestUrl = httpManifestUrlBuilder(manifestUrl).build().toString();
 
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL), false);
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
     String finalUri = requestBuilder.build().url().toString();
@@ -425,8 +422,17 @@ public class ExponentManifest {
   }
 
   private JSONObject newerManifest(JSONObject manifest1, JSONObject manifest2) throws JSONException, ParseException {
-    String manifest1Timestamp = manifest1.getString(MANIFEST_PUBLISHED_TIME_KEY);
-    String manifest2Timestamp = manifest2.getString(MANIFEST_PUBLISHED_TIME_KEY);
+    // use commitTime instead of publishedTime as it is more accurate;
+    // however, fall back to publishedTime in case older cached manifests do not contain
+    // the commitTime key (we have not always served it)
+    String manifest1Timestamp = manifest1.optString(MANIFEST_COMMIT_TIME_KEY);
+    if (manifest1Timestamp == null) {
+      manifest1Timestamp = manifest1.getString(MANIFEST_PUBLISHED_TIME_KEY);
+    }
+    String manifest2Timestamp = manifest2.optString(MANIFEST_COMMIT_TIME_KEY);
+    if (manifest2Timestamp == null) {
+      manifest2Timestamp = manifest2.getString(MANIFEST_PUBLISHED_TIME_KEY);
+    }
 
     // SimpleDateFormat on Android does not support the ISO-8601 representation of the timezone,
     // namely, using 'Z' to represent GMT. Since all our dates here are in the same timezone,
@@ -442,14 +448,39 @@ public class ExponentManifest {
     }
   }
 
-  private void fetchManifestStep2(final String manifestUrl, final String manifestString, final ExpoHeaders headers, final ManifestListener listener, final boolean isEmbedded, boolean isCached) throws JSONException {
+  private JSONObject extractManifest(final String manifestString) throws IOException {
+      try {
+          return new JSONObject(manifestString);
+      } catch (JSONException e) {
+        // Ignore this error, try to parse manifest as array
+      }
+
+      try {
+        // the manifestString could be an array of manifest objects
+        // in this case, we choose the first compatible manifest in the array
+        JSONArray manifestArray = new JSONArray(manifestString);
+        for (int i = 0; i < manifestArray.length(); i++) {
+          JSONObject manifestCandidate = manifestArray.getJSONObject(i);
+          String sdkVersion = manifestCandidate.getString(MANIFEST_SDK_VERSION_KEY);
+          if (Constants.SDK_VERSIONS_LIST.contains(sdkVersion)){
+            return manifestCandidate;
+          }
+        }
+      } catch (JSONException e){
+        throw new IOException("Manifest string is not a valid JSONObject or JSONArray: " + manifestString, e);
+      }
+      throw new IOException("No compatible manifest found. SDK Versions supported: " + Constants.SDK_VERSIONS + " Provided manifestString: " + manifestString);
+  }
+
+  private void fetchManifestStep2(final String manifestUrl, final String manifestString, final ExpoHeaders headers, final ManifestListener listener, final boolean isEmbedded, boolean isCached) throws JSONException, URISyntaxException, IOException {
     if (Constants.DEBUG_MANIFEST_METHOD_TRACING) {
       Debug.stopMethodTracing();
     }
     Analytics.markEvent(Analytics.TimedEvent.FINISHED_MANIFEST_NETWORK_REQUEST);
 
-    final JSONObject manifest = new JSONObject(manifestString);
+    final JSONObject manifest = extractManifest(manifestString);
     final boolean isMainShellAppExperience = manifestUrl.equals(Constants.INITIAL_URL);
+    final URI parsedManifestUrl = new URI(manifestUrl);
 
     if (manifest.has(MANIFEST_STRING_KEY) && manifest.has(MANIFEST_SIGNATURE_KEY)) {
       final JSONObject innerManifest = new JSONObject(manifest.getString(MANIFEST_STRING_KEY));
@@ -485,6 +516,19 @@ public class ExponentManifest {
       manifest.put(MANIFEST_LOADED_FROM_CACHE_KEY, isCached);
       if (isEmbedded || isMainShellAppExperience) {
         fetchManifestStep3(manifestUrl, manifest, true, listener);
+      } else if (isThirdPartyHosted(parsedManifestUrl)){
+        // Sandbox third party apps and consider them verified
+        // for https urls, sandboxed id is of form quinlanj.github.io/myProj-myApp
+        // for http urls, sandboxed id is of form UNVERIFIED-quinlanj.github.io/myProj-myApp
+        if (!Constants.isShellApp()){
+          String protocol = parsedManifestUrl.getScheme();
+          String securityPrefix = protocol.equals("https") || protocol.equals("exps") ? "" : "UNVERIFIED-";
+          String path = parsedManifestUrl.getPath() != null ? parsedManifestUrl.getPath() : "";
+          String slug = manifest.has(MANIFEST_SLUG) ? manifest.getString(MANIFEST_SLUG) : "";
+          String sandboxedId = securityPrefix + parsedManifestUrl.getHost() + path + "-" + slug;
+          manifest.put(MANIFEST_ID_KEY, sandboxedId);
+        }
+        fetchManifestStep3(manifestUrl, manifest, true, listener);
       } else {
         fetchManifestStep3(manifestUrl, manifest, false, listener);
       }
@@ -494,11 +538,18 @@ public class ExponentManifest {
     if (exponentServerHeader != null) {
       try {
         JSONObject eventProperties = new JSONObject(exponentServerHeader);
-        Amplitude.getInstance().logEvent(Analytics.LOAD_DEVELOPER_MANIFEST, eventProperties);
+        Analytics.logEvent(Analytics.LOAD_DEVELOPER_MANIFEST, eventProperties);
       } catch (Throwable e) {
         EXL.e(TAG, e);
       }
     }
+  }
+
+  private boolean isThirdPartyHosted(final URI uri) {
+    String host= uri.getHost();
+    boolean isExpoHost = host.equals("exp.host") || host.equals("expo.io") || host.equals("exp.direct") || host.equals("expo.test") ||
+        host.endsWith(".exp.host") || host.endsWith(".expo.io") || host.endsWith(".exp.direct") || host.endsWith(".expo.test");
+    return !isExpoHost;
   }
 
   private void fetchManifestStep3(final String manifestUrl, final JSONObject manifest, final boolean isVerified, final ManifestListener listener) {

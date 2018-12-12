@@ -15,7 +15,7 @@ import android.support.test.InstrumentationRegistry;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.facebook.infer.annotation.Assertions;
+import expolib_v1.com.facebook.infer.annotation.Assertions;
 import com.facebook.react.NativeModuleRegistryBuilder;
 import com.facebook.react.R;
 import com.facebook.react.ReactInstanceManager;
@@ -54,8 +54,7 @@ public class ReactTestHelper {
         if (mNativeModuleRegistryBuilder == null) {
           mNativeModuleRegistryBuilder = new NativeModuleRegistryBuilder(
             (ReactApplicationContext) mContext,
-            null,
-            false);
+            null);
         }
         Assertions.assertNotNull(nativeModule);
         mNativeModuleRegistryBuilder.addNativeModule(nativeModule);
@@ -67,8 +66,7 @@ public class ReactTestHelper {
         if (mNativeModuleRegistryBuilder == null) {
           mNativeModuleRegistryBuilder = new NativeModuleRegistryBuilder(
             (ReactApplicationContext) mContext,
-            null,
-            false);
+            null);
         }
         JavaScriptExecutor executor = null;
         try {

@@ -23,7 +23,6 @@ import javax.inject.Inject;
 import de.greenrobot.event.EventBus;
 import host.exp.exponent.Constants;
 import host.exp.exponent.ExponentManifest;
-import host.exp.exponent.LauncherActivity;
 import host.exp.exponent.analytics.EXL;
 import host.exp.exponent.di.NativeModuleDepsProvider;
 import host.exp.exponent.kernel.KernelConstants;
@@ -168,7 +167,7 @@ public class PushNotificationHelper {
         intent.putExtra(KernelConstants.NOTIFICATION_MANIFEST_URL_KEY, manifestUrl);
         intent.putExtra(KernelConstants.NOTIFICATION_KEY, body); // deprecated
         intent.putExtra(KernelConstants.NOTIFICATION_OBJECT_KEY, notificationEvent.toJSONObject(null).toString());
-        PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent,
+        PendingIntent pendingIntent = PendingIntent.getActivity(context, notificationId, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_ONE_SHOT);
 
         // Build notification

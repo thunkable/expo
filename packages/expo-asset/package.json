@@ -1,0 +1,25 @@
+{
+  "name": "expo-asset",
+  "version": "1.1.1-rc.1",
+  "description": "Expo Asset standalone universal module",
+  "main": "index.js",
+  "keywords": [
+    "react-native",
+    "expo",
+    "asset"
+  ],
+  "homepage": "https://docs.expo.io/",
+  "author": "650 Industries, Inc.",
+  "license": "MIT",
+  "peerDependencies": {
+    "expo-file-system": "~1.1.0-rc.1"
+  },
+  "dependencies": {
+    "expo-core": "~1.2.0-rc.1",
+    "uri-parser": "^1.0.1",
+    "url-join": "^4.0.0"
+  },
+  "devDependencies": {
+    "babel-preset-expo": "^5.0.0-rc.0"
+  }
+}

@@ -22,7 +22,7 @@ const ProjectVersions = require('./project-versions');
 
 const EXPONENT_DIR = process.env.EXPONENT_DIR || path.join(__dirname, '..');
 
-const EXPO_CLIENT_UNIVERSAL_MODULES = Modules.getAllForPlatform('ios');
+const EXPO_CLIENT_UNIVERSAL_MODULES = Modules.getAllNativeForExpoClientOnPlatform('ios');
 
 // We need these permissions when testing but don't want them
 // ending up in our release.
@@ -31,25 +31,7 @@ const ANDROID_TEST_PERMISSIONS = `
 `;
 
 // some files are absent on turtle builders and we don't want log errors there
-const isTurtle = process.env.TURTLE_WORKING_DIR_PATH ? true : false;
-
-let isInUniverse = true;
-try {
-  let universePkgJson = require(process.env.UNIVERSE_PKG_JSON || '../../package.json');
-  if (universePkgJson.name !== 'universe') {
-    isInUniverse = false;
-  }
-} catch (e) {
-  isInUniverse = false;
-}
-
-let useLegacyWorkflow = false;
-if (isInUniverse) {
-  // determine workflow
-  if (!fs.existsSync('../../.pt-state')) {
-    useLegacyWorkflow = true;
-  }
-}
+const isTurtle = !!process.env.TURTLE_WORKING_DIR_PATH;
 
 async function getSavedDevHomeUrlAsync(platform) {
   let devHomeConfig = await new JsonFile(
@@ -62,9 +44,9 @@ const macrosFuncs = {
   async TEST_APP_URI() {
     if (process.env.TEST_SUITE_URI) {
       return process.env.TEST_SUITE_URI;
-    } else if (isInUniverse) {
+    } else {
       try {
-        let testSuitePath = path.join(__dirname, '..', '..', 'apps', 'test-suite');
+        let testSuitePath = path.join(__dirname, '..', 'apps', 'test-suite');
         let status = await Project.currentStatus(testSuitePath);
         if (status === 'running') {
           return await UrlUtils.constructManifestUrlAsync(testSuitePath);
@@ -74,8 +56,6 @@ const macrosFuncs = {
       } catch (e) {
         return '';
       }
-    } else {
-      return '';
     }
   },
 
@@ -90,19 +70,17 @@ const macrosFuncs = {
   async TEST_SERVER_URL() {
     let url = 'TODO';
 
-    if (isInUniverse) {
-      try {
-        let lanAddress = ip.address();
-        let localServerUrl = `http://${lanAddress}:3013`;
-        let result = await request.get({
-          url: `${localServerUrl}/expo-test-server-status`,
-          timeout: 500, // ms
-        });
-        if (result.body === 'running!') {
-          url = localServerUrl;
-        }
-      } catch (e) {}
-    }
+    try {
+      let lanAddress = ip.address();
+      let localServerUrl = `http://${lanAddress}:3013`;
+      let result = await request.get({
+        url: `${localServerUrl}/expo-test-server-status`,
+        timeout: 500, // ms
+      });
+      if (result.body === 'running!') {
+        url = localServerUrl;
+      }
+    } catch (e) {}
 
     return url;
   },
@@ -136,9 +114,10 @@ const macrosFuncs = {
       manifest = await ExponentTools.getManifestAsync(savedDevHomeUrl, {
         'Exponent-Platform': platform,
         'Exponent-SDK-Version': sdkVersion,
+        Accept: 'application/expo+json,application/json',
       });
     } catch (e) {
-      const msg = `Unable to download manifest from ${savedDevHomeUrl}: ${e.message}`
+      const msg = `Unable to download manifest from ${savedDevHomeUrl}: ${e.message}`;
       console[isTurtle ? 'debug' : 'error'](msg);
       return '';
     }
@@ -151,13 +130,7 @@ const macrosFuncs = {
       return '';
     }
 
-    let projectRoot;
-    if (isInUniverse && useLegacyWorkflow) {
-      projectRoot = path.join(EXPONENT_DIR, 'js', '__internal__');
-    } else {
-      projectRoot = path.join(EXPONENT_DIR, 'js');
-    }
-
+    let projectRoot = path.join(EXPONENT_DIR, 'home');
     let manifest;
     try {
       let url = await UrlUtils.constructManifestUrlAsync(projectRoot);
@@ -166,7 +139,14 @@ const macrosFuncs = {
       );
       manifest = await ExponentTools.getManifestAsync(url, {
         'Exponent-Platform': platform,
+        Accept: 'application/expo+json,application/json',
       });
+      if (manifest.name !== 'expo-home') {
+        console.log(
+          `Manifest at ${url} is not expo-home; using published kernel manifest instead...`
+        );
+        return '';
+      }
     } catch (e) {
       console.error(`Unable to generate manifest from ${projectRoot}: ${e.message}`);
       return '';
@@ -204,7 +184,9 @@ function generateUniversalModuleConfig(moduleInfo, modulesPath) {
 }
 
 function generateUniversalModulesConfig(universalModules, modulesPath) {
-  return universalModules.filter(moduleInfo => moduleInfo.isNativeModule).map(moduleInfo => generateUniversalModuleConfig(moduleInfo, modulesPath));
+  return universalModules
+    .filter(moduleInfo => moduleInfo.isNativeModule)
+    .map(moduleInfo => generateUniversalModuleConfig(moduleInfo, modulesPath));
 }
 
 function kernelManifestObjectToJson(manifest) {
@@ -308,7 +290,7 @@ async function generateAndroidBuildConstantsFromMacrosAsync(macros) {
     macros.BUILD_MACHINE_KERNEL_MANIFEST = macros.DEV_PUBLISHED_KERNEL_MANIFEST;
     console.log('\n\nUsing published dev version of Expo Home\n\n');
   } else {
-    console.log('\n\nUsing Expo Home from __internal__\n\n');
+    console.log('\n\nUsing Expo Home from your local master branch\n\n');
   }
   delete macros['DEV_PUBLISHED_KERNEL_MANIFEST'];
 
@@ -393,7 +375,7 @@ async function copyTemplateFileAsync(source, dest, templateSubstitutions, config
 
   _.map(templateSubstitutions, (value, textToReplace) => {
     currentSourceFile = currentSourceFile.replace(
-      new RegExp(`\\\$\\\{${textToReplace}\\\}`, 'g'),
+      new RegExp(`\\$\\{${textToReplace}\\}`, 'g'),
       value
     );
   });
@@ -430,9 +412,9 @@ async function modifyIOSInfoPlistAsync(path, filename, templateSubstitutions) {
 
 async function getTemplateSubstitutions() {
   try {
-    return await new JsonFile(path.join(EXPONENT_DIR, '__internal__', 'keys.json')).readAsync();
+    return await new JsonFile(path.join(EXPONENT_DIR, 'secrets', 'keys.json')).readAsync();
   } catch (e) {
-    // Don't have __internal__, use public keys
+    // Don't have access to decrypted secrets, use public keys
     console.log('generate-dynamic-macros is falling back to `template-files/keys.json`');
     return await new JsonFile(path.join(EXPONENT_DIR, 'template-files', 'keys.json')).readAsync();
   }
@@ -459,24 +441,6 @@ async function writeIOSTemplatesAsync(
     }
   );
 
-  // also render the Podfile for the OSS repo, if we're in universe
-  // stubbed in to eliminate the step of running this script before building the client from expo/expo
-  if (fs.existsSync(path.join(EXPONENT_DIR, 'ios', '__github__'))) {
-    await renderPodfileAsync(
-      path.join(templateFilesPath, platform, 'Podfile'),
-      path.join(EXPONENT_DIR, 'ios', '__github__', 'Podfile'),
-      {
-        TARGET_NAME: 'Exponent',
-        REACT_NATIVE_PATH: '../js/node_modules/react-native',
-        UNIVERSAL_MODULES: generateUniversalModulesConfig(
-          EXPO_CLIENT_UNIVERSAL_MODULES,
-          '../modules/'
-        ),
-        REACT_NATIVE_EXPO_SUBSPECS: ['Expo', 'ExpoOptional'],
-      }
-    );
-  }
-
   if (args.expoKitPath) {
     let expoKitPath = path.join(process.cwd(), args.expoKitPath);
     await renderExpoKitPodspecAsync(
@@ -494,9 +458,9 @@ async function writeIOSTemplatesAsync(
         EXPOKIT_PATH: '../..',
         UNIVERSAL_MODULES: generateUniversalModulesConfig(
           EXPO_CLIENT_UNIVERSAL_MODULES,
-          '../../modules'
+          '../../packages'
         ),
-        REACT_NATIVE_PATH: '../../../react-native-lab/react-native',
+        REACT_NATIVE_PATH: '../../react-native-lab/react-native',
       }
     );
   }

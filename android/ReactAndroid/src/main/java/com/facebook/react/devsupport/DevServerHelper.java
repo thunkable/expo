@@ -11,7 +11,7 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.widget.Toast;
 import com.facebook.common.logging.FLog;
-import com.facebook.infer.annotation.Assertions;
+import expolib_v1.com.facebook.infer.annotation.Assertions;
 import com.facebook.react.R;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.common.ReactConstants;
@@ -29,6 +29,7 @@ import com.facebook.react.packagerconnection.RequestOnlyHandler;
 import com.facebook.react.packagerconnection.Responder;
 import java.io.File;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Locale;
@@ -91,7 +92,12 @@ public class DevServerHelper {
 
         void onCaptureHeapCommand(final Responder responder);
 
-        void onPokeSamplingProfilerCommand(final Responder responder);
+        // Allow apps to provide listeners for custom packager commands.
+        @Nullable
+        Map<String, RequestHandler> customCommandHandlers();
+    }
+
+    public interface PackagerCustomCommandProvider {
     }
 
     public interface SymbolicationListener {
@@ -180,13 +186,10 @@ public class DevServerHelper {
                         commandListener.onCaptureHeapCommand(responder);
                     }
                 });
-                handlers.put("pokeSamplingProfiler", new RequestOnlyHandler() {
-
-                    @Override
-                    public void onRequest(@Nullable Object params, Responder responder) {
-                        commandListener.onPokeSamplingProfilerCommand(responder);
-                    }
-                });
+                Map<String, RequestHandler> customHandlers = commandListener.customCommandHandlers();
+                if (customHandlers != null) {
+                    handlers.putAll(customHandlers);
+                }
                 handlers.putAll(new FileIoHandler().handlers());
                 ConnectionCallback onPackagerConnectedCallback = new ConnectionCallback() {
 
@@ -350,7 +353,21 @@ public class DevServerHelper {
     }
 
     public void downloadBundleFromURL(DevBundleDownloadListener callback, File outputFile, String bundleURL, BundleDownloader.BundleInfo bundleInfo) {
-        mBundleDownloader.downloadBundleFromURL(callback, outputFile, bundleURL, bundleInfo);
+        mBundleDownloader.downloadBundleFromURL(callback, outputFile, bundleURL, bundleInfo, getDeltaClientType());
+    }
+
+    public void downloadBundleFromURL(DevBundleDownloadListener callback, File outputFile, String bundleURL, BundleDownloader.BundleInfo bundleInfo, Request.Builder requestBuilder) {
+        mBundleDownloader.downloadBundleFromURL(callback, outputFile, bundleURL, bundleInfo, getDeltaClientType(), requestBuilder);
+    }
+
+    private BundleDeltaClient.ClientType getDeltaClientType() {
+        if (mSettings.isBundleDeltasCppEnabled()) {
+            return BundleDeltaClient.ClientType.NATIVE;
+        } else if (mSettings.isBundleDeltasEnabled()) {
+            return BundleDeltaClient.ClientType.DEV_SUPPORT;
+        } else {
+            return BundleDeltaClient.ClientType.NONE;
+        }
     }
 
     /**
@@ -434,8 +451,10 @@ public class DevServerHelper {
                     callback.onPackagerStatusFetched(false);
                     return;
                 }
-                if (!PACKAGER_OK_STATUS.equals(body.string())) {
-                    FLog.e(ReactConstants.TAG, "Got unexpected response from packager when requesting status: " + body.string());
+                // cannot call body.string() twice, stored it into variable. https://github.com/square/okhttp/issues/1240#issuecomment-68142603
+                String bodyString = body.string();
+                if (!PACKAGER_OK_STATUS.equals(bodyString)) {
+                    FLog.e(ReactConstants.TAG, "Got unexpected response from packager when requesting status: " + bodyString);
                     callback.onPackagerStatusFetched(false);
                     return;
                 }
@@ -465,7 +484,7 @@ public class DevServerHelper {
         }
         mOnChangePollingEnabled = true;
         mOnServerContentChangeListener = onServerContentChangeListener;
-        mOnChangePollingClient = new OkHttpClient.Builder().connectionPool(new ConnectionPool(1, LONG_POLL_KEEP_ALIVE_DURATION_MS, TimeUnit.MINUTES)).connectTimeout(HTTP_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS).build();
+        mOnChangePollingClient = new OkHttpClient.Builder().connectionPool(new ConnectionPool(1, LONG_POLL_KEEP_ALIVE_DURATION_MS, TimeUnit.MILLISECONDS)).connectTimeout(HTTP_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS).build();
         enqueueOnChangeEndpointLongPolling();
     }
 
@@ -497,13 +516,16 @@ public class DevServerHelper {
                     // of a failure, so that we don't flood network queue with frequent requests in case when
                     // dev server is down
                     FLog.d(ReactConstants.TAG, "Error while requesting /onchange endpoint", e);
+                    // NOTE(expo): in case our connection closed due to a timeout, we should just retry
+                    // immediately so that there isn't a disruption in listening to the onchange endpoint
+                    int delay = (e instanceof SocketTimeoutException) ? 0 : LONG_POLL_FAILURE_DELAY_MS;
                     mRestartOnChangePollingHandler.postDelayed(new Runnable() {
 
                         @Override
                         public void run() {
                             handleOnChangePollingResponse(false);
                         }
-                    }, LONG_POLL_FAILURE_DELAY_MS);
+                    }, delay);
                 }
             }
 

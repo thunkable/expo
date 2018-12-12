@@ -8,14 +8,16 @@
 
 @implementation EXUtilService
 
-+ (NSString *)name
-{
-  return @"Util";
-}
+EX_REGISTER_SINGLETON_MODULE(Util)
 
 - (UIViewController *)currentViewController
 {
   return [[ExpoKit sharedInstance] currentViewController];
+}
+
+- (nullable NSDictionary *)launchOptions
+{
+  return [[ExpoKit sharedInstance] launchOptions];
 }
 
 @end

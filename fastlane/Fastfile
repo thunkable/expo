@@ -6,7 +6,8 @@ fastlane_require 'shellwords'
 fastlane_version "1.30.0"
 default_platform :ios
 
-output_directory = File.expand_path('./fastlane/Deployment')
+# path relative to Fastfile
+output_directory = File.expand_path('./Deployment')
 
 def set_bundle_version_from_commit_count
   bundle_version = Actions.lane_context[SharedValues::VERSION_NUMBER] + ".10" + number_of_commits.to_s
@@ -20,8 +21,9 @@ end
 
 def clear_bundle_version
   puts "removing CFBundleVersion..."
-  update_plist(
-    plist_path: "./ios/Exponent/Supporting/Info.plist",
+  update_info_plist(
+    xcodeproj: "ios/Exponent.xcodeproj",
+    plist_path: "Exponent/Supporting/Info.plist",
     block: proc do |plist|
       plist.delete("CFBundleVersion")
     end
@@ -36,6 +38,7 @@ platform :ios do
       xcodeproj: "./ios/Exponent.xcodeproj"
     )
     set_bundle_version_from_commit_count
+    setup_circle_ci
   end
 
   lane :test do
@@ -48,13 +51,19 @@ platform :ios do
   end
 
   lane :create_simulator_build do
-    directory = prompt(text: "Please enter the path where we should output the sim build, relative to ./ios (i.e. ../my-simulator-build):")
+    directory = "./ios" + prompt(
+      ci_input: "./build",
+      text: "Please enter the path where we should output the sim build, relative to ./ios (i.e. ../my-simulator-build):",
+    )
     puts "Build will be written to: " + File.expand_path(directory)
-    commands = [
-      "cd ../ios",
-      "xcodebuild -workspace Exponent.xcworkspace -scheme Exponent -sdk iphonesimulator -configuration Release -derivedDataPath #{directory} ARCHS=\"i386 x86_64\" ONLY_ACTIVE_ARCH=NO | xcpretty"
-    ]
-    sh(commands.join(' && '))
+    xcbuild(
+      workspace: "ios/Exponent.xcworkspace",
+      scheme: "Exponent",
+      sdk: "iphonesimulator",
+      configuration: "Release",
+      derived_data_path: directory,
+      xcargs: "ARCHS=\"i386 x86_64\" ONLY_ACTIVE_ARCH=NO"
+    )
   end
 
   lane :release do
@@ -84,9 +93,7 @@ platform :ios do
       output_name: "Exponent.ipa",
     )
 
-    deliver(
-      submit_for_review: false
-    )
+    deliver()
   end
 
   after_all do |lane|

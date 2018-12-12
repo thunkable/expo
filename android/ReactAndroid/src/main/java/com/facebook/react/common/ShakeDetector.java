@@ -16,7 +16,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
-import com.facebook.infer.annotation.Assertions;
+import expolib_v1.com.facebook.infer.annotation.Assertions;
 
 /**
  * Listens for the user shaking their phone. Allocation-less once it starts listening.
@@ -34,7 +34,7 @@ public class ShakeDetector implements SensorEventListener {
 
   private float mAccelerationX, mAccelerationY, mAccelerationZ;
 
-  public static interface ShakeListener {
+  public interface ShakeListener {
     void onShake();
   }
 

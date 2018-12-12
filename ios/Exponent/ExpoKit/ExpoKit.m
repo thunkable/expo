@@ -19,8 +19,8 @@
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
 #import <GoogleMaps/GoogleMaps.h>
 
-NSString * const EXAppDidRegisterForRemoteNotificationsNotification = @"EXAppDidRegisterForRemoteNotificationsNotification";
-NSString * const EXAppDidRegisterUserNotificationSettingsNotification = @"EXAppDidRegisterUserNotificationSettingsNotification";
+NSString * const EXAppDidRegisterForRemoteNotificationsNotification = @"kEXAppDidRegisterForRemoteNotificationsNotification";
+NSString * const EXAppDidRegisterUserNotificationSettingsNotification = @"kEXAppDidRegisterUserNotificationSettingsNotification";
 
 @interface ExpoKit () <CrashlyticsDelegate>
 {
@@ -89,12 +89,8 @@ NSString * const EXAppDidRegisterUserNotificationSettingsNotification = @"EXAppD
 
 - (void)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-  if (@available(iOS 10, *)) {
-    [DDLog addLogger:[DDOSLogger sharedInstance]];
-  } else {
-    [DDLog addLogger:[DDASLLogger sharedInstance]];
-    [DDLog addLogger:[DDTTYLogger sharedInstance]];
-  }
+  [DDLog addLogger:[DDOSLogger sharedInstance]];
+  
 
   RCTSetFatalHandler(handleFatalReactError);
 

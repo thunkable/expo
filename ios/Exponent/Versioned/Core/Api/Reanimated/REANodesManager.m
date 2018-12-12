@@ -16,6 +16,38 @@
 #import "Nodes/REAJSCallNode.h"
 #import "Nodes/REABezierNode.h"
 #import "Nodes/REAEventNode.h"
+#import "REAModule.h"
+#import "Nodes/REAAlwaysNode.h"
+#import "Nodes/REAConcatNode.h"
+#import "REAModule.h"
+
+@interface RCTUIManager ()
+
+- (void)updateView:(nonnull NSNumber *)reactTag
+          viewName:(NSString *)viewName
+             props:(NSDictionary *)props;
+
+- (void)setNeedsLayout;
+
+@end
+
+
+// Interface below has been added in order to use private methods of RCTUIManager,
+// RCTUIManager#UpdateView is a React Method which is exported to JS but in 
+// Objective-C it stays private
+// RCTUIManager#setNeedsLayout is a method which updated layout only which
+// in its turn will trigger relayout if no batch has been activated
+
+@interface RCTUIManager ()
+
+- (void)updateView:(nonnull NSNumber *)reactTag
+          viewName:(NSString *)viewName
+             props:(NSDictionary *)props;
+
+- (void)setNeedsLayout;
+
+@end
+
 
 @implementation REANodesManager
 {
@@ -26,6 +58,7 @@
   REAUpdateContext *_updateContext;
   BOOL _wantRunUpdates;
   NSMutableArray<REAOnAnimationCallback> *_onAnimationCallbacks;
+  NSMutableArray<REANativeAnimationOp> *_operationsInBatch;
 }
 
 - (instancetype)initWithModule:(REAModule *)reanimatedModule
@@ -40,6 +73,7 @@
     _updateContext = [REAUpdateContext new];
     _wantRunUpdates = NO;
     _onAnimationCallbacks = [NSMutableArray new];
+    _operationsInBatch = [NSMutableArray new];
   }
   return self;
 }
@@ -47,6 +81,31 @@
 - (void)invalidate
 {
   [self stopUpdatingOnAnimationFrame];
+}
+
+- (void)operationsBatchDidComplete
+{
+  if (_displayLink) {
+    // if display link is set it means some of the operations that have run as a part of the batch
+    // requested updates. We want updates to be run in the same frame as in which operations have
+    // been scheduled as it may mean the new view has just been mounted and expects its initial
+    // props to be calculated.
+    // Unfortunately if the operation has just scheduled animation callback it won't run until the
+    // next frame. So if displayLink is set we trigger onAnimationFrame callback to make sure it
+    // runs in the correct frame.
+    [REANode runPropUpdates:_updateContext];
+    if (_operationsInBatch.count != 0) {
+      NSMutableArray<REANativeAnimationOp> *copiedOperationsQueue = _operationsInBatch;
+      _operationsInBatch = [NSMutableArray new];
+      RCTExecuteOnUIManagerQueue(^{
+        for (int i = 0; i < copiedOperationsQueue.count; i++) {
+          copiedOperationsQueue[i](self.uiManager);
+        }
+        [self.uiManager setNeedsLayout];
+      });
+    }
+    _wantRunUpdates = NO;
+  }
 }
 
 - (REANode *)findNodeByID:(REANodeID)nodeID
@@ -104,11 +163,35 @@
   }
 
   [REANode runPropUpdates:_updateContext];
+  if (_operationsInBatch.count != 0) {
+    NSMutableArray<REANativeAnimationOp> *copiedOperationsQueue = _operationsInBatch;
+    _operationsInBatch = [NSMutableArray new];
+    RCTExecuteOnUIManagerQueue(^{
+      for (int i = 0; i < copiedOperationsQueue.count; i++) {
+        copiedOperationsQueue[i](self.uiManager);
+      }
+      [self.uiManager setNeedsLayout];
+    });
+  }
   _wantRunUpdates = NO;
 
   if (_onAnimationCallbacks.count == 0) {
     [self stopUpdatingOnAnimationFrame];
   }
+}
+
+- (void)enqueueUpdateViewOnNativeThread:(nonnull NSNumber *)reactTag
+                               viewName:(NSString *) viewName
+                            nativeProps:(NSMutableDictionary *)nativeProps {
+  [_operationsInBatch addObject:^(RCTUIManager *uiManager) {
+    [uiManager updateView:reactTag viewName:viewName props:nativeProps];
+  }];
+}
+
+- (void)getValue:(REANodeID)nodeID
+        callback:(RCTResponseSenderBlock)callback
+{
+  callback(@[_nodes[nodeID].value]);
 }
 
 #pragma mark -- Graph
@@ -135,6 +218,8 @@
             @"call": [REAJSCallNode class],
             @"bezier": [REABezierNode class],
             @"event": [REAEventNode class],
+            @"always": [REAAlwaysNode class],
+            @"concat": [REAConcatNode class],
 //            @"listener": nil,
             };
   });
@@ -238,7 +323,7 @@
 - (void)processEvent:(id<RCTEvent>)event
 {
   NSString *key = [NSString stringWithFormat:@"%@%@", event.viewTag, event.eventName];
-  REAEventNode *eventNode = (REAEventNode *)[_eventMapping objectForKey:key];
+  REAEventNode *eventNode = [_eventMapping objectForKey:key];
   [eventNode processEvent:event];
 }
 
@@ -254,8 +339,10 @@
   }
 }
 
-- (void)configureNativeProps:(NSSet<NSString *> *)nativeProps
+- (void)configureProps:(NSSet<NSString *> *)nativeProps
+               uiProps:(NSSet<NSString *> *)uiProps
 {
+  _uiProps = uiProps;
   _nativeProps = nativeProps;
 }
 

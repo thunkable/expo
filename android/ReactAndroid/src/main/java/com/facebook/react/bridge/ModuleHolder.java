@@ -1,15 +1,18 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+// Copyright (c) 2004-present, Facebook, Inc.
+
+// This source code is licensed under the MIT license found in the
+// LICENSE file in the root directory of this source tree.
 
 package com.facebook.react.bridge;
 
-import static com.facebook.infer.annotation.Assertions.assertNotNull;
+import static expolib_v1.com.facebook.infer.annotation.Assertions.assertNotNull;
 import static com.facebook.react.bridge.ReactMarkerConstants.CREATE_MODULE_END;
 import static com.facebook.react.bridge.ReactMarkerConstants.CREATE_MODULE_START;
 import static com.facebook.systrace.Systrace.TRACE_TAG_REACT_JAVA_BRIDGE;
 
 import com.facebook.debug.holder.PrinterHolder;
 import com.facebook.debug.tags.ReactDebugOverlayTags;
-import com.facebook.infer.annotation.Assertions;
+import expolib_v1.com.facebook.infer.annotation.Assertions;
 import com.facebook.proguard.annotations.DoNotStrip;
 import com.facebook.react.module.model.ReactModuleInfo;
 import com.facebook.systrace.SystraceMessage;
@@ -37,6 +40,7 @@ public class ModuleHolder {
   private final String mName;
   private final boolean mCanOverrideExistingModule;
   private final boolean mHasConstants;
+  private final boolean mIsCxxModule;
 
   private @Nullable Provider<? extends NativeModule> mProvider;
   // Outside of the constructur, these should only be checked or set when synchronized on this
@@ -52,6 +56,7 @@ public class ModuleHolder {
     mCanOverrideExistingModule = moduleInfo.canOverrideExistingModule();
     mHasConstants = moduleInfo.hasConstants();
     mProvider = provider;
+    mIsCxxModule = moduleInfo.isCxxModule();
     if (moduleInfo.needsEagerInit()) {
       mModule = create();
     }
@@ -61,6 +66,7 @@ public class ModuleHolder {
     mName = nativeModule.getName();
     mCanOverrideExistingModule = nativeModule.canOverrideExistingModule();
     mHasConstants = true;
+    mIsCxxModule = CxxModuleWrapper.class.isAssignableFrom(nativeModule.getClass());
     mModule = nativeModule;
     PrinterHolder.getPrinter()
         .logMessage(ReactDebugOverlayTags.NATIVE_MODULE, "NativeModule init: %s", mName);
@@ -109,6 +115,8 @@ public class ModuleHolder {
   public boolean getHasConstants() {
     return mHasConstants;
   }
+
+  public boolean isCxxModule() {return mIsCxxModule; }
 
   @DoNotStrip
   public NativeModule getModule() {
