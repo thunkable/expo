@@ -1,5 +1,8 @@
 # expo-firebase-app
 
+> expo-firebase is still in RC and therefore subject to breaking changings. Be sure to run `yarn upgrade` and `cd ios; pod install` when upgrading.
+
+
 `expo-firebase-app` provides the base library for interfacing with native Firebase.
 
 [**Full documentation**](https://rnfirebase.io/docs/master/core/reference/core)
@@ -23,15 +26,6 @@ pod 'EXFirebaseApp', path: '../node_modules/expo-firebase-app/ios'
 ```
 
 and run `pod install`.
-
-#### Manually
-
-You could also choose install this module manually.
-
-1.  In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
-2.  Go to `node_modules` ➜ `expo-firebase-app` and add `EXFirebaseApp.xcodeproj`
-3.  In XCode, in the project navigator, select your project. Add `libEXFirebaseApp.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
-4.  Run your project (`Cmd+R`).
 
 ### Android
 
@@ -101,6 +95,8 @@ That's all! 💙
 
 ### Caveats
 
+Google Sign-In will crash automatically if used in the client, as it now requires the `REVERSE_CLIENT_ID` to be located in the `info.plist`
+
 When using a native Firebase app in a dynamic way, you will need to consider that `offline persistence`, and `Auth Tokens` may not behave as expected.
 
 Offline persistence will store data relative to the Firebase app. If you were to change the app in reload then this can corrupt or erase the data.
@@ -113,7 +109,7 @@ If you create an Auth Token in a native firebase app, then reload with a differe
 import React from 'react';
 import { View, Platform } from 'react-native';
 import firebase from 'expo-firebase-app';
-import { Constants } from 'expo-constants';
+import Constants from 'expo-constants';
 
 export default class ExampleView extends React.Component {
   async componentDidMount() {

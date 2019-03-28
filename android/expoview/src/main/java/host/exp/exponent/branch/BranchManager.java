@@ -9,7 +9,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 
-import host.exp.exponent.ABIVersion;
 import host.exp.exponent.RNObject;
 import io.branch.referral.Branch;
 
@@ -22,7 +21,8 @@ public class BranchManager {
       if (ai.metaData != null) {
         return ai.metaData.getString("io.branch.sdk.BranchKey") != null;
       }
-    } catch (final PackageManager.NameNotFoundException ignore) {}
+    } catch (final PackageManager.NameNotFoundException ignore) {
+    }
 
     return false;
   }
@@ -35,7 +35,7 @@ public class BranchManager {
   }
 
   public static void handleLink(Activity activity, String uri, String sdkVersion) {
-    if (!isEnabled(activity) || ABIVersion.toNumber(sdkVersion) < ABIVersion.toNumber("17.0.0")) {
+    if (!isEnabled(activity)) {
       return;
     }
     RNObject branchModule = new RNObject("host.exp.exponent.modules.api.standalone.branch.RNBranchModule");

@@ -1,4 +1,4 @@
-import { Constants } from 'expo-constants';
+import Constants from 'expo-constants';
 import React from 'react';
 import symbolicateStackTrace from 'react-native/Libraries/Core/Devtools/symbolicateStackTrace';
 import TestRenderer from 'react-test-renderer';
@@ -15,11 +15,9 @@ jest.mock('react-native/Libraries/Core/Devtools/symbolicateStackTrace', () =>
 );
 
 jest.mock('expo-constants', () => ({
-  Constants: {
-    manifest: {
-      developer: {
-        projectRoot: '/home/test/project',
-      },
+  manifest: {
+    developer: {
+      projectRoot: '/home/test/project',
     },
   },
 }));
@@ -39,6 +37,15 @@ it(`serializes nested objects`, async () => {
     'info'
   );
   expect(result.body).toMatchSnapshot();
+  expect(result.includesStack).toBeFalsy();
+});
+
+it(`serializes cyclic objects`, async () => {
+  let object: { [key: string]: any } = {};
+  object.self = object;
+  let result = await LogSerialization.serializeLogDataAsync([object], 'info');
+  expect(result.body).toMatchSnapshot();
+  expect(result.body[0]).toMatch('Circular');
   expect(result.includesStack).toBeFalsy();
 });
 
@@ -70,7 +77,7 @@ it(`serializes promises`, async () => {
 
 it(`serializes React elements`, async () => {
   class TestComponent extends React.Component {
-    render () {
+    render() {
       return <TestComponent />;
     }
   }

@@ -1,5 +1,7 @@
 # expo-firebase-performance
 
+> expo-firebase is still in RC and therefore subject to breaking changings. Be sure to run `yarn upgrade` and `cd ios; pod install` when upgrading.
+
 `expo-firebase-performance` captures a number of traces automatically, such as all outbound HTTP requests, app boot time and more.
 
 [**Full documentation**](https://rnfirebase.io/docs/master/perf-mon/reference/perf-mon)
@@ -21,15 +23,6 @@ pod 'EXFirebasePerformance', path: '../node_modules/expo-firebase-performance/io
 ```
 
 and run `pod install`.
-
-#### Manually
-
-You could also choose install this module manually.
-
-1.  In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
-2.  Go to `node_modules` ➜ `expo-firebase-performance` and add `EXFirebasePerformance.xcodeproj`
-3.  In XCode, in the project navigator, select your project. Add `libEXFirebasePerformance.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
-4.  Run your project (`Cmd+R`).
 
 ### Android
 
@@ -91,8 +84,7 @@ You could also choose install this module manually.
 import React from 'react';
 import { Button } from 'react-native';
 import firebase from 'expo-firebase-app';
-// Include the module before using it.
-import 'expo-firebase-performance';
+
 // API can be accessed with: firebase.perf();
 
 export default class DemoView extends React.Component {

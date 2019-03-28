@@ -32,6 +32,7 @@ async function getTestModulesAsync() {
     require('./tests/Constants'),
     require('./tests/Contacts'),
     require('./tests/FileSystem'),
+    require('./tests/GoogleSignIn'),
     require('./tests/Localization'),
     require('./tests/Location'),
     require('./tests/Linking'),
@@ -51,6 +52,7 @@ async function getTestModulesAsync() {
     require('./tests/Notifications'),
     require('./tests/FBNativeAd'),
     require('./tests/FBBannerAd'),
+    require('./tests/TaskManager'),
   ];
   if (Constants.isDevice) {
     modules = modules.concat([require('./tests/Brightness')]);

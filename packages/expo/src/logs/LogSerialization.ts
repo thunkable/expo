@@ -1,9 +1,10 @@
-import { Constants } from 'expo-constants';
+import Constants from 'expo-constants';
 import prettyFormat from 'pretty-format';
 import parseErrorStack, { StackFrame } from 'react-native/Libraries/Core/Devtools/parseErrorStack';
-import symbolicateStackTrace from 'react-native/Libraries/Core/Devtools/symbolicateStackTrace';
+import symbolicateStackTrace from './symbolicateStackTrace';
 
 import { LogData, LogLevel } from './RemoteLogging';
+import ReactNodeFormatter from './format/ReactNodeFormatter';
 
 type SerializedData = {
   body: LogData[];
@@ -72,7 +73,7 @@ function _stringifyLogData(data: unknown[]): string[] {
     if (typeof item === 'string') {
       return item;
     } else {
-      return prettyFormat(item);
+      return prettyFormat(item, { plugins: [ReactNodeFormatter] });
     }
   });
 }

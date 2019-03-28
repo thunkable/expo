@@ -209,7 +209,11 @@ public class ExponentManifest {
     String httpManifestUrl = uriBuilder.build().toString();
 
     // Fetch manifest
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(
+        httpManifestUrl,
+        manifestUrl.equals(Constants.INITIAL_URL),
+        mExponentSharedPreferences.getSessionSecret()
+    );
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
     requestBuilder.cacheControl(CacheControl.FORCE_NETWORK);
@@ -276,7 +280,7 @@ public class ExponentManifest {
 
     if (uri.getHost() == null) {
       String message = "Could not load manifest.";
-      if (Constants.isShellApp()) {
+      if (Constants.isStandaloneApp()) {
         message += " Are you sure this experience has been published?";
       } else {
         message += " Are you sure this is a valid URL?";
@@ -290,7 +294,11 @@ public class ExponentManifest {
     }
 
     // Fetch manifest
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(
+        httpManifestUrl,
+        manifestUrl.equals(Constants.INITIAL_URL),
+        mExponentSharedPreferences.getSessionSecret()
+    );
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
 
@@ -404,7 +412,11 @@ public class ExponentManifest {
   public void fetchEmbeddedManifest(final String manifestUrl, final ManifestListener listener) {
     String httpManifestUrl = httpManifestUrlBuilder(manifestUrl).build().toString();
 
-    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(httpManifestUrl, manifestUrl.equals(Constants.INITIAL_URL));
+    Request.Builder requestBuilder = ExponentUrls.addExponentHeadersToManifestUrl(
+        httpManifestUrl,
+        manifestUrl.equals(Constants.INITIAL_URL),
+        mExponentSharedPreferences.getSessionSecret()
+    );
     requestBuilder.header("Exponent-Accept-Signature", "true");
     requestBuilder.header("Expo-JSON-Error", "true");
     String finalUri = requestBuilder.build().url().toString();
@@ -520,7 +532,7 @@ public class ExponentManifest {
         // Sandbox third party apps and consider them verified
         // for https urls, sandboxed id is of form quinlanj.github.io/myProj-myApp
         // for http urls, sandboxed id is of form UNVERIFIED-quinlanj.github.io/myProj-myApp
-        if (!Constants.isShellApp()){
+        if (!Constants.isStandaloneApp()){
           String protocol = parsedManifestUrl.getScheme();
           String securityPrefix = protocol.equals("https") || protocol.equals("exps") ? "" : "UNVERIFIED-";
           String path = parsedManifestUrl.getPath() != null ? parsedManifestUrl.getPath() : "";

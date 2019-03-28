@@ -1,12 +1,6 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import {
-  ColorPropType,
-  View,
-  ViewPropTypes,
-  processColor,
-  requireNativeComponent,
-} from 'react-native';
+import { ColorPropType, View, ViewPropTypes, processColor } from 'react-native';
 
 import NativeLinearGradient from './NativeLinearGradient';
 
@@ -15,7 +9,7 @@ type Props = {
   locations?: number[] | null;
   start?: Point | null;
   end?: Point | null;
-} & React.ElementProps<View>;
+} & React.ComponentProps<typeof View>;
 
 type Point = { x: number; y: number } | [number, number];
 
@@ -41,8 +35,8 @@ export default class LinearGradient extends React.Component<Props> {
         {...props}
         colors={colors.map(processColor)}
         locations={locations}
-        startPoint={start ? _normalizePoint(start) : null}
-        endPoint={end ? _normalizePoint(end) : null}
+        startPoint={start ? _normalizePoint(start) : undefined}
+        endPoint={end ? _normalizePoint(end) : undefined}
       />
     );
   }

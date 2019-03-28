@@ -1,0 +1,5 @@
+Start building rich experiences with just your Android device and your computer. Expo is a developer tool for creating experiences with interactive gestures and graphics, using JavaScript and React Native.
+
+To learn more visit https://expo.io.
+
+Note: some programming experience is recommended.

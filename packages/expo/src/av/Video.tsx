@@ -32,7 +32,11 @@ export type NaturalSize = {
   orientation: 'portrait' | 'landscape';
 };
 
-type ResizeMode = 'contain' | 'cover' | 'stretch';
+enum ResizeMode {
+  CONTAIN = 'contain',
+  COVER = 'cover',
+  STRETCH = 'stretch',
+}
 
 type ReadyForDisplayEvent = {
   naturalSize: NaturalSize;
@@ -60,7 +64,9 @@ type Props = {
 
   // UI stuff
   useNativeControls?: boolean;
-  resizeMode?: ResizeMode;
+  // NOTE(ide): This should just be ResizeMode. We have the explicit strings for now since we don't
+  // currently export the ResizeMode enum.
+  resizeMode?: ResizeMode | 'stretch' | 'cover' | 'contain';
   usePoster?: boolean;
 
   // Playback API
@@ -80,17 +86,20 @@ type Props = {
   translateX?: number;
   translateY?: number;
   rotation?: number;
-} & React.ElementProps<View>;
+} & React.ComponentProps<typeof View>;
 
 type NativeProps = {
   source: PlaybackNativeSource | null;
-  nativeResizeMode?: Object;
+  nativeResizeMode?: unknown;
   status?: PlaybackStatusToSet;
-  onStatusUpdateNative?: (event: Object) => void;
-  onReadyForDisplayNative?: (event: Object) => void;
-  onFullscreenUpdateNative?: (event: Object) => void;
+  onLoadStartNative?: () => void;
+  onLoadNative?: (event: { nativeEvent: PlaybackStatus }) => void;
+  onErrorNative?: (event: { nativeEvent: { error: string } }) => void;
+  onStatusUpdateNative?: (event: { nativeEvent: PlaybackStatus }) => void;
+  onReadyForDisplayNative?: (event: { nativeEvent: ReadyForDisplayEvent }) => void;
+  onFullscreenUpdateNative?: (event: { nativeEvent: FullscreenUpdateEvent }) => void;
   useNativeControls?: boolean;
-} & React.ElementProps<View>;
+} & React.ComponentProps<typeof View>;
 
 type State = {
   showPoster: boolean;
@@ -134,9 +143,9 @@ const ExpoVideoManagerConstants = NativeModules.UIManager.ExponentVideo
   : NativeModules.ExponentVideoManager;
 
 export default class Video extends React.Component<Props, State> implements Playback {
-  static RESIZE_MODE_CONTAIN = 'contain';
-  static RESIZE_MODE_COVER = 'cover';
-  static RESIZE_MODE_STRETCH = 'stretch';
+  static RESIZE_MODE_CONTAIN = ResizeMode.CONTAIN;
+  static RESIZE_MODE_COVER = ResizeMode.COVER;
+  static RESIZE_MODE_STRETCH = ResizeMode.STRETCH;
 
   static IOS_FULLSCREEN_UPDATE_PLAYER_WILL_PRESENT = IOS_FULLSCREEN_UPDATE_PLAYER_WILL_PRESENT;
   static IOS_FULLSCREEN_UPDATE_PLAYER_DID_PRESENT = IOS_FULLSCREEN_UPDATE_PLAYER_DID_PRESENT;
@@ -430,12 +439,12 @@ export default class Video extends React.Component<Props, State> implements Play
 
     let nativeResizeMode = ExpoVideoManagerConstants.ScaleNone;
     if (this.props.resizeMode) {
-      let resizeMode: ResizeMode = this.props.resizeMode;
-      if (resizeMode === Video.RESIZE_MODE_STRETCH) {
+      let resizeMode = this.props.resizeMode;
+      if (resizeMode === ResizeMode.STRETCH) {
         nativeResizeMode = ExpoVideoManagerConstants.ScaleToFill;
-      } else if (resizeMode === Video.RESIZE_MODE_CONTAIN) {
+      } else if (resizeMode === ResizeMode.CONTAIN) {
         nativeResizeMode = ExpoVideoManagerConstants.ScaleAspectFit;
-      } else if (resizeMode === Video.RESIZE_MODE_COVER) {
+      } else if (resizeMode === ResizeMode.COVER) {
         nativeResizeMode = ExpoVideoManagerConstants.ScaleAspectFill;
       }
     }
@@ -458,6 +467,7 @@ export default class Video extends React.Component<Props, State> implements Play
     });
 
     // Replace selected native props
+    // @ts-ignore: TypeScript thinks "children" is not in the list of props
     const nativeProps: NativeProps = {
       style: _STYLES.base,
       ...omit(this.props, 'source'),
@@ -484,15 +494,4 @@ export default class Video extends React.Component<Props, State> implements Play
 Object.assign(Video.prototype, PlaybackMixin);
 
 type ExponentVideo = React.ComponentClass<NativeProps>;
-const ExponentVideo = requireNativeComponent('ExponentVideo', Video, {
-  nativeOnly: {
-    source: true,
-    nativeResizeMode: true,
-    onStatusUpdateNative: true,
-    onLoadStartNative: true,
-    onLoadNative: true,
-    onErrorNative: true,
-    onReadyForDisplayNative: true,
-    onFullscreenUpdateNative: true,
-  },
-});
+const ExponentVideo = requireNativeComponent('ExponentVideo');

@@ -2,49 +2,20 @@
  * @flow
  * Storage representation wrapper
  */
-import { NativeModulesProxy } from 'expo-core';
-import { events, ModuleBase, registerModule, utils } from 'expo-firebase-app';
-
-import StorageRef from './reference';
+import { ModuleBase, SharedEventEmitter } from 'expo-firebase-app';
 
 import type { App } from 'expo-firebase-app';
-const { getAppEventName, SharedEventEmitter } = events;
-const { stripTrailingSlash } = utils;
 
-const NATIVE_EVENTS = ['Expo.Firebase.storage_event', 'Expo.Firebase.storage_error'];
+import StorageRef from './reference';
+import statics from './statics';
+
+const NATIVE_EVENTS = {
+  storageEvent: 'Expo.Firebase.storage_event',
+  storageError: 'Expo.Firebase.storage_error',
+};
 
 export const MODULE_NAME = 'ExpoFirebaseStorage';
 export const NAMESPACE = 'storage';
-
-const { [MODULE_NAME]: FirebaseStorage } = NativeModulesProxy;
-
-export const statics = {
-  TaskEvent: {
-    STATE_CHANGED: 'state_changed',
-  },
-  TaskState: {
-    RUNNING: 'running',
-    PAUSED: 'paused',
-    SUCCESS: 'success',
-    CANCELLED: 'cancelled',
-    ERROR: 'error',
-  },
-  Native: FirebaseStorage
-    ? {
-        MAIN_BUNDLE_PATH: stripTrailingSlash(FirebaseStorage.MAIN_BUNDLE_PATH),
-        CACHES_DIRECTORY_PATH: stripTrailingSlash(FirebaseStorage.CACHES_DIRECTORY_PATH),
-        DOCUMENT_DIRECTORY_PATH: stripTrailingSlash(FirebaseStorage.DOCUMENT_DIRECTORY_PATH),
-        EXTERNAL_DIRECTORY_PATH: stripTrailingSlash(FirebaseStorage.EXTERNAL_DIRECTORY_PATH),
-        EXTERNAL_STORAGE_DIRECTORY_PATH: stripTrailingSlash(
-          FirebaseStorage.EXTERNAL_STORAGE_DIRECTORY_PATH
-        ),
-        TEMP_DIRECTORY_PATH: stripTrailingSlash(FirebaseStorage.TEMP_DIRECTORY_PATH),
-        LIBRARY_DIRECTORY_PATH: stripTrailingSlash(FirebaseStorage.LIBRARY_DIRECTORY_PATH),
-        FILETYPE_REGULAR: stripTrailingSlash(FirebaseStorage.FILETYPE_REGULAR),
-        FILETYPE_DIRECTORY: stripTrailingSlash(FirebaseStorage.FILETYPE_DIRECTORY),
-      }
-    : {},
-};
 
 export default class Storage extends ModuleBase {
   static moduleName = MODULE_NAME;
@@ -58,7 +29,7 @@ export default class Storage extends ModuleBase {
    */
   constructor(app: App) {
     super(app, {
-      events: NATIVE_EVENTS,
+      events: Object.values(NATIVE_EVENTS),
       moduleName: MODULE_NAME,
       hasMultiAppSupport: true,
       hasCustomUrlSupport: false,
@@ -66,12 +37,12 @@ export default class Storage extends ModuleBase {
     });
 
     SharedEventEmitter.addListener(
-      getAppEventName(this, 'Expo.Firebase.storage_event'),
+      this.getAppEventName(NATIVE_EVENTS.storageEvent),
       this._handleStorageEvent.bind(this)
     );
 
     SharedEventEmitter.addListener(
-      getAppEventName(this, 'Expo.Firebase.storage_error'),
+      this.getAppEventName(NATIVE_EVENTS.storageError),
       this._handleStorageEvent.bind(this)
     );
   }
@@ -128,7 +99,7 @@ export default class Storage extends ModuleBase {
    * INTERNALS
    */
   _getSubEventName(path: string, eventName: string) {
-    return getAppEventName(this, `${path}-${eventName}`);
+    return this.getAppEventName(`${path}-${eventName}`);
   }
 
   _handleStorageEvent(event: Object) {
@@ -155,8 +126,6 @@ export default class Storage extends ModuleBase {
     SharedEventEmitter.removeListener(this._getSubEventName(path, eventName), origCB);
   }
 }
-
-registerModule(Storage);
 
 export { default as StorageReference } from './reference';
 export { StorageRef };

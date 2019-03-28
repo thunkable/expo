@@ -8,7 +8,7 @@
 #import <EXPermissions/EXContactsRequester.h>
 #import <EXPermissions/EXLocationRequester.h>
 #import <EXPermissions/EXPermissions.h>
-#import <EXPermissions/EXLocalNotificationRequester.h>
+#import <EXPermissions/EXUserNotificationRequester.h>
 #import <EXPermissions/EXRemindersRequester.h>
 #import <EXPermissions/EXRemoteNotificationRequester.h>
 #import <EXPermissions/EXCameraRollRequester.h>
@@ -21,6 +21,7 @@ NSString * const EXPermissionExpiresNever = @"never";
 @property (nonatomic, weak) id<EXPermissionsServiceInterface> permissionsService;
 @property (nonatomic, weak) id<EXUtilitiesInterface> utils;
 @property (nonatomic, assign) NSString *experienceId;
+@property (nonatomic, weak) EXModuleRegistry * moduleRegistry;
 
 @end
 
@@ -30,17 +31,12 @@ EX_EXPORT_MODULE(ExpoPermissions);
 
 + (const NSArray<Protocol *> *)exportedInterfaces
 {
-  return @[@protocol(EXPermissionsInterface)];
+  return @[@protocol(EXPermissionsInterface), @protocol(EXPermissionsModule)];
 }
 
 - (NSDictionary *)constantsToExport
 {
   return nil;
-}
-
-- (dispatch_queue_t)methodQueue
-{
-  return dispatch_get_main_queue();
 }
 
 - (instancetype)init
@@ -63,6 +59,7 @@ EX_EXPORT_MODULE(ExpoPermissions);
 {
   _permissionsService = [moduleRegistry getSingletonModuleForName:@"Permissions"];
   _utils = [moduleRegistry getModuleImplementingProtocol:@protocol(EXUtilitiesInterface)];
+  _moduleRegistry = moduleRegistry;
 }
 
 # pragma mark - Expo exported methods
@@ -133,7 +130,7 @@ EX_EXPORT_METHOD_AS(askAsync,
     permissionType = [permissionsToBeAsked anyObject];
     [permissionsToBeAsked removeObject:permissionType];
     
-    id<EXPermissionRequester> requester = [[self class] getPermissionRequesterForType:permissionType];
+    id<EXPermissionRequester> requester = [self getPermissionRequesterForType:permissionType];
     
     if (requester == nil) {
       // TODO: other types of permission requesters, e.g. facebook
@@ -257,9 +254,9 @@ EX_EXPORT_METHOD_AS(askAsync,
 - (NSDictionary *)getPermissionsForResource:(NSString *)type
 {
   if ([type isEqualToString:@"notifications"]) {
-    return [EXRemoteNotificationRequester permissions];
+    return [EXRemoteNotificationRequester permissionsWithModuleRegistry:_moduleRegistry];
   } else if ([type isEqualToString:@"userFacingNotifications"]) {
-    return [EXLocalNotificationRequester permissions];
+    return [EXUserNotificationRequester permissionsWithModuleRegistry:_moduleRegistry];
   } else if ([type isEqualToString:@"location"]) {
     return [EXLocationRequester permissions];
   } else if ([type isEqualToString:@"camera"]) {
@@ -325,11 +322,7 @@ EX_EXPORT_METHOD_AS(askAsync,
   NSMutableArray<NSString *> *scopedPermissionsToBeAsked = [NSMutableArray new];
   NSMutableArray<NSString *> *globalPermissionsToBeAsked = [NSMutableArray new];
   NSMutableDictionary *permissions = [NSMutableDictionary new];
-  
-  if ([permissionsTypes count] != 1 && [permissionsTypes containsObject:@"location"]) {
-    return reject (@"E_PERMISSIONS_INVALID", @"iOS platform requires you to ask for Permissions.LOCATION separately.", nil);
-  }
-  
+
   for (NSString *permissionType in permissionsTypes) {
     NSMutableDictionary *permission = [[self getPermissionsForResource:permissionType] mutableCopy];
     
@@ -376,12 +369,12 @@ EX_EXPORT_METHOD_AS(askAsync,
   [self askForScopedPermissions:scopedPermissionsToBeAsked withResolver:scopedPermissionResolver withRejecter:reject];
 }
 
-+ (id<EXPermissionRequester>)getPermissionRequesterForType:(NSString *)type
+- (id<EXPermissionRequester>)getPermissionRequesterForType:(NSString *)type
 {
   if ([type isEqualToString:@"notifications"]) {
-    return [[EXRemoteNotificationRequester alloc] init];
+    return [[EXRemoteNotificationRequester alloc] initWithModuleRegistry:_moduleRegistry];
   } else if ([type isEqualToString:@"userFacingNotifications"]) {
-    return [[EXLocalNotificationRequester alloc] init];
+    return [[EXUserNotificationRequester alloc] initWithModuleRegistry:_moduleRegistry];
   } else if ([type isEqualToString:@"location"]) {
     return [[EXLocationRequester alloc] init];
   } else if ([type isEqualToString:@"camera"]) {
@@ -441,15 +434,13 @@ EX_EXPORT_METHOD_AS(askAsync,
     return type;
   } else if ([type isEqualToString:@"reminders"]) {
     return type;
-  } else if ([type isEqualToString:@"SMS"]) {
-    return type;
   }
   return nil;
 }
 
 + (BOOL)isPermissionImplicitlyGranted:(NSString *)permissionType
 {
-  return [@[@"systemBrightness", @"SMS"] containsObject:permissionType];
+  return [@[@"systemBrightness"] containsObject:permissionType];
 }
 
 + (BOOL)isExcludedScopedPermission:(NSString *)permissionType

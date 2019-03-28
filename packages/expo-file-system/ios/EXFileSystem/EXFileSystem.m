@@ -13,6 +13,8 @@
 
 #import <EXFileSystemInterface/EXFileSystemInterface.h>
 #import <EXFileSystemInterface/EXFileSystemManagerInterface.h>
+#import <EXFileSystemInterface/EXFilePermissionModuleInterface.h>
+
 
 #import <EXCore/EXEventEmitterService.h>
 
@@ -582,8 +584,7 @@ EX_EXPORT_METHOD_AS(downloadResumableStartAsync,
            nil);
     return;
   }
-  
-  NSData *resumeData = data ? [data dataUsingEncoding:NSUTF8StringEncoding] : nil;
+  NSData *resumeData = data ? [[NSData alloc] initWithBase64EncodedString:data options:0] : nil;
   [self _downloadResumableCreateSessionWithUrl:url
                                 withScopedPath:path
                                       withUUID:uuid
@@ -608,8 +609,7 @@ EX_EXPORT_METHOD_AS(downloadResumablePauseAsync,
       NSURLSessionDownloadTask *downloadTask = [downloadTasks firstObject];
       if (downloadTask) {
         [downloadTask cancelByProducingResumeData:^(NSData * _Nullable resumeData) {
-          NSString *data = [[NSString alloc] initWithData:resumeData encoding:NSUTF8StringEncoding];
-          resolve(@{@"resumeData":EXNullIfNil(data)});
+          resolve(@{ @"resumeData": EXNullIfNil([resumeData base64EncodedStringWithOptions:0]) });
         }];
       } else {
         reject(@"E_UNABLE_TO_PAUSE",
@@ -720,24 +720,9 @@ EX_EXPORT_METHOD_AS(downloadResumablePauseAsync,
 
 - (EXFileSystemPermissionFlags)_permissionsForPath:(NSString *)path
 {
-  path = [path stringByStandardizingPath];
-  if ([path hasPrefix:[_documentDirectory stringByAppendingString:@"/"]]) {
-    return EXFileSystemPermissionRead | EXFileSystemPermissionWrite;
-  }
-  if ([path isEqualToString:_documentDirectory])  {
-    return EXFileSystemPermissionRead | EXFileSystemPermissionWrite;
-  }
-  if ([path hasPrefix:[_cachesDirectory stringByAppendingString:@"/"]]) {
-    return EXFileSystemPermissionRead | EXFileSystemPermissionWrite;
-  }
-  if ([path isEqualToString:_cachesDirectory])  {
-    return EXFileSystemPermissionRead | EXFileSystemPermissionWrite;
-  }
-  NSString *bundleDirectory = [_fileSystemManager bundleDirectoryForExperienceId:_moduleRegistry.experienceId];
-  if (bundleDirectory != nil && [path hasPrefix:[bundleDirectory stringByAppendingString:@"/"]]) {
-    return EXFileSystemPermissionRead;
-  }
-  return EXFileSystemPermissionNone;
+  return [[_moduleRegistry getModuleImplementingProtocol:@protocol(EXFilePermissionModuleInterface)]
+          getPathPermissions:(NSString *)path
+          scopedDirs:@[_documentDirectory, _cachesDirectory]];
 }
 
 - (void)sendEventWithName:(NSString *)eventName body:(id)body

@@ -7,13 +7,40 @@ commands:
       - run: echo ". ~/.nix-profile/etc/profile.d/nix.sh" >> ~/.bash_profile
   setup:
     steps:
-      # ssh: used in circleci checkout steps
-      # direnv: used to configure environment with .envrc files
-      - run: nix-env -iA nixpkgs.openssh nixpkgs.direnv
+      - run:
+          name: Install common packages
+          # direnv: configures environment with .envrc files
+          # findutils (where, find, etc): expo-module test
+          # git: circleci checkout steps
+          # gnugrep: used in .envrc
+          # gnutar: used by nix commands which download channels
+          # gzip: used by nix commands which download channels
+          # openssh: circleci checkout steps
+          # rsync: expo-module-scripts uses to copy template files
+          # xz: circleci checkout steps
+          command: |
+            nix-env -iA \
+              nixpkgs.direnv \
+              nixpkgs.findutils \
+              nixpkgs.git \
+              nixpkgs.gnugrep \
+              nixpkgs.gnutar \
+              nixpkgs.gzip \
+              nixpkgs.openssh \
+              nixpkgs.rsync \
+              nixpkgs.xz
       - run: mkdir -p ~/.config/direnv
       - run: echo -e "[whitelist]\nprefix = [ \"$HOME\" ]" > ~/.config/direnv/config.toml
       - run: echo 'eval "$(direnv export bash)"' >> ~/.bash_profile
+      - run: echo '--frozen-lockfile true' >> ~/.yarnrc
       - checkout
+  decrypt_secrets_if_possible:
+    steps:
+      - run: |
+          if ! [ -v EXPO_GIT_CRYPT_KEY_BASE64 ]; then
+            echo 'git-crypt key not present in environment' && exit 0
+          fi
+          git crypt unlock <(echo $EXPO_GIT_CRYPT_KEY_BASE64 | base64 --decode)
   update_submodules:
     steps:
       - run: git submodule update --init
@@ -21,25 +48,33 @@ commands:
     steps:
       - run: curl https://cocoapods-specs.circleci.com/fetch-cocoapods-repo-from-s3.sh | bash -s cf
   restore_yarn_cache:
+    parameters:
+      working_directory:
+        type: string
+        default: .
     steps:
       - restore_cache:
-          key: yarn-v1-{{ checksum "yarn.lock" }}
+          key: yarn-v1-{{ checksum "<< parameters.working_directory >>/yarn.lock" }}
   save_yarn_cache:
+    parameters:
+      working_directory:
+        type: string
+        default: .
     steps:
       - save_cache:
-          key: yarn-v1-{{ checksum "yarn.lock" }}
+          key: yarn-v1-{{ checksum "<< parameters.working_directory >>/yarn.lock" }}
           paths:
             - ~/.cache/yarn  # `yarn cache dir`
   restore_gradle_cache:
     steps:
       - restore_cache:
-          key: jars-v0-{{ checksum "android/build.gradle" }}-{{ checksum "android/app/build.gradle" }}
+          key: jars-v1-{{ checksum "android/build.gradle" }}-{{ checksum "android/app/build.gradle" }}
   save_gradle_cache:
     steps:
       - save_cache:
-          key: jars-v0-{{ checksum "android/build.gradle" }}-{{ checksum "android/app/build.gradle" }}
+          key: jars-v1-{{ checksum "android/build.gradle" }}-{{ checksum "android/app/build.gradle" }}
           paths:
-            - /.gradle
+            - ~/.gradle
   yarn:
     parameters:
       command:
@@ -47,34 +82,41 @@ commands:
         default: install
       working_directory:
         type: string
+      max_tries:
+        type: integer
+        default: 1
     steps:
       - run:
+          name: yarn << parameters.command >> (<< parameters.working_directory >>)
           working_directory: << parameters.working_directory >>
-          command: for i in {1..5}; do nix run nixpkgs.yarn -c yarn << parameters.command >> && break || sleep 5; done
+          command: for i in {1..<< parameters.max_tries >>}; do ((i > 1)) && sleep 5; yarn << parameters.command >> && break; done
+  yarn_install:
+    parameters:
+      working_directory:
+        type: string
+    steps:
+      - yarn:
+          command: 'install'
+          working_directory: << parameters.working_directory >>
+          max_tries: 5
 
 executors:
   # We add -l to all the shell commands to make it easier to use direnv
-  android:
-    working_directory: ~/expo
+  nix: &nix
     docker:
-      # https://hub.docker.com/r/circleci/android/tags/
-      # https://github.com/CircleCI-Public/circleci-dockerfiles/tree/master/android/images
-      - image: circleci/android:api-27-ndk-r17b # Should match compileSdkVersion in android/app/build.gradle
-    shell: /bin/bash -leo pipefail
-    resource_class: large
-    environment:
-      # nix installation fails if this is not set
-      USER: circleci
-  js:
-    docker:
-      - image: lnl7/nix:latest # only latest includes common utils we want
-    resource_class: small
-    working_directory: ~/expo
+      - image: lnl7/nix:2.1.2
     # Symlink to the readline-enabled bash which is the default command of the container
     shell: /run/current-system/sw/bin/bash -leo pipefail
+    working_directory: ~/expo
+  android:
+    <<: *nix
+    resource_class: xlarge
+  js:
+    <<: *nix
+    resource_class: small
   mac:
     macos: # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
-      xcode: "10.0.0"
+      xcode: "10.1.0"
     working_directory: /Users/distiller/project
     shell: /bin/bash -leo pipefail
     environment:
@@ -83,8 +125,6 @@ executors:
       LANG: en_US.UTF-8
 
 workflows:
-  version: 2
-
   # JavaScript packages that make up the SDK
   sdk:
     jobs:
@@ -95,18 +135,31 @@ workflows:
   client:
     jobs:
       - home
+      - expotools
       - client_android
       - client_ios
-  #     - shell_app_sim_base_ios
+      - test_suite_publish
+      # TODO: fix devicefarm running tests
+      #- android_test_suite:
+      #   requires:
+      #     - test_suite_publish
+      - shell_app_sim_base_ios
+      - client_android_approve_google_play:
+          type: approval
+          requires:
+            - client_android
+          filters:
+            branches:
+              only:
+                - /^sdk-\d+$/
+      - client_android_release_google_play:
+          requires:
+            - client_android_approve_google_play
   #     - shell_app_ios_tests:
   #         requires:
   #           - shell_app_sim_base_ios
   #           - test_suite_publish
-  #     - test_suite_publish
-  #     - client_android_tests:
-  #         requires:
-  #           - test_suite_publish
-  #     - shell_app_base_android_new
+  #     - shell_app_base_android_new # tarball built and uploaded from universe/server/turtle
 
 jobs:
   expo_sdk:
@@ -115,13 +168,32 @@ jobs:
       - setup
       - update_submodules
       - restore_yarn_cache
-      - yarn:
+      - yarn_install:
           working_directory: ~/expo
       - save_yarn_cache
       # Add back linting once we get ESLint or TSLint set up
       - yarn:
           command: test --maxWorkers 1
           working_directory: ~/expo/packages/expo
+      - yarn:
+          command: build
+          working_directory: ~/expo/packages/expo-ads-admob
+      - yarn:
+          command: build
+          working_directory: ~/expo/packages/expo-camera
+      - yarn:
+          command: test --maxWorkers 1
+          working_directory: ~/expo/packages/expo-font
+      - yarn:
+          command: test --maxWorkers 1
+          working_directory: ~/expo/packages/expo-react-native-adapter
+      - yarn:
+          command: test --maxWorkers 1
+          working_directory: ~/expo/packages/expo-sensors
+      - yarn:
+          command: test --maxWorkers 1
+          working_directory: ~/expo/packages/expo-sms
+
 
   babel_preset:
     executor: js
@@ -129,7 +201,7 @@ jobs:
       - setup
       - update_submodules
       - restore_yarn_cache
-      - yarn:
+      - yarn_install:
           working_directory: ~/expo
       - save_yarn_cache
       - yarn:
@@ -145,12 +217,26 @@ jobs:
       - setup
       - update_submodules
       - restore_yarn_cache
-      - yarn:
+      - yarn_install:
           working_directory: ~/expo
       - save_yarn_cache
       - yarn:
           command: jest --maxWorkers 1
           working_directory: ~/expo/home
+
+  expotools:
+    executor: js
+    steps:
+      - setup
+      - restore_yarn_cache:
+          working_directory: ~/expo/tools/expotools
+      - yarn_install:
+          working_directory: ~/expo/tools/expotools
+      - save_yarn_cache:
+          working_directory: ~/expo/tools/expotools
+      - yarn:
+          command: tsc
+          working_directory: ~/expo/tools/expotools
 
   client_ios:
     executor: mac
@@ -160,34 +246,92 @@ jobs:
       - update_submodules
       - run: git lfs pull
       - fetch_cocoapods_specs
-      - yarn:
+      - yarn_install:
           working_directory: ~/project/tools-public
-      - run: nix run nixpkgs.nodejs-8_x -c ~/project/tools-public/generate-files-ios.sh
-      - run: nix run nixpkgs.nodejs-8_x nixpkgs.fastlane -c fastlane ios create_simulator_build
+      - run: fastlane ios create_simulator_build
+      - store_artifacts:
+          path: ~/Library/Logs/fastlane/
+
+  shell_app_sim_base_ios:
+    executor: mac
+    steps:
+      - install_nix
+      - setup
+      - update_submodules
+      - run: git lfs pull
+      - fetch_cocoapods_specs
+      - yarn_install:
+          working_directory: ~/project/tools-public
+      - run: ~/project/tools-public/generate-files-ios.js
+      - run:
+          name: Build ios shell app simulator
+          working_directory: ~/project/tools-public
+          no_output_timeout: 30m
+          command: gulp ios-shell-app --action build --type simulator --verbose true --skipRepoUpdate --shellAppSdkVersion UNVERSIONED
+
+  android_test_suite:
+    executor: android
+    steps:
+      - setup
+      - setup
+      - yarn_install:
+          working_directory: ~/expo # need jsc-android dependency in expokit-npm-package
+      - yarn_install:
+          working_directory: ~/expo/tools-public
+      - restore_gradle_cache
+      - run: |
+          nix-shell android/shell.nix --pure \
+            --keep AWS_ACCESS_KEY_ID \
+            --keep AWS_SECRET_ACCESS_KEY \
+            --keep SSL_CERT_FILE \
+            --run "fastlane android devicefarm"
+      - save_gradle_cache
 
   client_android:
     executor: android
     steps:
-      - install_nix
       - setup
-      - yarn:
+      - yarn_install:
           working_directory: ~/expo # need jsc-android dependency in expokit-npm-package
-      - yarn:
+      - yarn_install:
           working_directory: ~/expo/tools-public
-      - run: nix-env -f . -iA nodejs-8_x # For some reason `nix run` doesn't work
-      - run: ~/expo/tools-public/generate-dynamic-macros-android.sh
       - restore_gradle_cache
-      - run:
-          working_directory: ~/expo/android
-          command: ./gradlew :app:preBuild
+      - decrypt_secrets_if_possible
+      - run: echo $ANDROID_KEYSTORE_B64 | base64 -d > android/app/release-key.jks
+      - run: |
+          nix-shell android/shell.nix --pure \
+            --keep ANDROID_KEYSTORE_PASSWORD \
+            --keep ANDROID_KEY_ALIAS \
+            --keep ANDROID_KEY_PASSWORD \
+            --run "fastlane android build build_type:Release"
       - save_gradle_cache
-      - run:
-          working_directory: ~/expo/android
-          command: ./gradlew :app:assembleProdMinSdkProdKernelRelease
-      - run: echo 'export PATH="/opt/android/sdk/build-tools/27.0.3:$PATH"' >> $BASH_ENV # should match buildToolsVersion in android/app/build.gradle
-      - run: zipalign -v -p 4 android/app/build/outputs/apk/prodMinSdkProdKernel/release/app-prodMinSdk-prodKernel-release-unsigned.apk app-prod-release-unsigned-aligned.apk
-      - run:
-          name: Sign APK
-          command: apksigner sign --ks <(echo $ANDROID_KEYSTORE_B64 | base64 -d) --ks-key-alias $ANDROID_KEY_ALIAS --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --out exponent-release.apk app-prod-release-unsigned-aligned.apk
+      - save_cache:
+          key: client-android-apk-{{ .Revision }}
+          paths:
+            - ~/expo/android/app/build/outputs/apk
       - store_artifacts:
-          path: ~/expo/exponent-release.apk
+          path: ~/expo/android/app/build/outputs/apk
+      - store_artifacts: # daemon logs for debugging crashes
+          path: ~/.gradle/daemon
+
+  client_android_release_google_play:
+    executor: js
+    steps:
+      - setup
+      - restore_cache:
+          key: client-android-apk-{{ .Revision }}
+      - run: echo $ANDROID_KEYSTORE_B64 | base64 -d > android/app/release-key.jks
+      - run:
+          name: Upload APK to Google Play and release to production
+          working_directory: ~/expo
+          command: fastlane android prod_release
+
+  test_suite_publish:
+    executor: nix
+    steps:
+      - setup
+      - update_submodules
+      - decrypt_secrets_if_possible
+      - run:
+          working_directory: ~/expo/apps/test-suite
+          command: ./publish.sh

@@ -29,6 +29,10 @@ For scripts that need to run as part of the npm lifecycle, you'd invoke the comm
 
 These are the commands:
 
+### configure
+
+This generates common configuration files like `tsonfig.json` for the package. These auto-generated files are meant to be read-only and committed to Git.
+
 ### typecheck
 
 This type checks the source TypeScript with `tsc`. This command is separate from `build` and does not emit compiled JS.

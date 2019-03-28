@@ -1,5 +1,7 @@
 # expo-firebase-notifications
 
+> expo-firebase is still in RC and therefore subject to breaking changings. Be sure to run `yarn upgrade` and `cd ios; pod install` when upgrading.
+
 `expo-firebase-notifications` enables support for both remote (FCM) and local notifications.
 
 [**Full documentation**](https://rnfirebase.io/docs/master/notifications/introduction)
@@ -24,15 +26,6 @@ pod 'EXFirebaseNotifications', path: '../node_modules/expo-firebase-notification
 
 and run `pod install`.
 
-#### Manually
-
-You could also choose install this module manually.
-
-1.  In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
-2.  Go to `node_modules` ➜ `expo-firebase-notifications` and add `EXFirebaseNotifications.xcodeproj`
-3.  In XCode, in the project navigator, select your project. Add `libEXFirebaseNotifications.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
-4.  Run your project (`Cmd+R`).
-
 #### Common Setup
 
 **Update `AppDelegate.m`**
@@ -49,21 +42,15 @@ Add the following to the `didFinishLaunchingWithOptions:(NSDictionary *)launchOp
 [EXFirebaseNotifications configure];
 ```
 
-Add the following method to your `ios/[App Name]/AppDelegate.m`:
-
-```objective-c
-- (void)application:(UIApplication *)application didReceiveLocalNotification:(UILocalNotification *)notification {
-  [[EXFirebaseNotifications instance] didReceiveLocalNotification:notification];
-}
-```
-
 [Based on the RNFirebase iOS setup](https://rnfirebase.io/docs/master/notifications/ios)
 
 **Remote Notifications (Optional)**
 
 If you would like to support Remote Notifications via FCM, also add the following import to the top of your `ios/[App Name]/AppDelegate.m:`
 
-#import <EXFirebaseMessaging/EXFirebaseMessaging.h>
+```objective-c
+import <EXFirebaseMessaging/EXFirebaseMessaging.h>
+```
 
 Then add the following methods to your `ios/[App Name]/AppDelegate.m`:
 
@@ -194,11 +181,6 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import firebase from 'expo-firebase-app';
 import { Permissions } from 'expo-permissions';
-
-// Include the module before using it.
-import 'expo-firebase-instance-id';
-import 'expo-firebase-messaging';
-import 'expo-firebase-notifications';
 
 import type { Notification } from 'expo-firebase-notifications';
 

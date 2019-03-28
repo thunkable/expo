@@ -10,12 +10,16 @@ DangerZone.Branch.subscribe(bundle => {
 });
 
 export default class ExpoApisScreen extends React.Component {
+  static path = '';
+
   static navigationOptions = {
     title: 'APIs in Expo SDK',
   };
 
   componentWillMount() {
-    this._notificationSubscription = Notifications.addListener(this._handleNotification);
+    if (Platform.OS !== 'web') {
+      this._notificationSubscription = Notifications.addListener(this._handleNotification);
+    }
   }
 
   componentWillUnmount() {
@@ -23,7 +27,7 @@ export default class ExpoApisScreen extends React.Component {
   }
 
   _handleNotification = notification => {
-    let { data, origin, remote } = notification;
+    let { data, origin, remote, actionId, userText } = notification;
     if (typeof data === 'string') {
       data = JSON.parse(data);
     }
@@ -35,14 +39,20 @@ export default class ExpoApisScreen extends React.Component {
      */
 
     let message;
-    if (Platform.OS === 'android') {
-      message = `Notification ${origin} with data: ${JSON.stringify(data)}`;
+    if (remote) {
+      message = `Push notification ${
+        actionId ? `"${actionId}"` : origin
+      } with data: ${JSON.stringify(data)}`;
     } else {
-      if (remote) {
-        message = `Push notification ${origin} with data: ${JSON.stringify(data)}`;
-      } else {
-        message = `Local notification ${origin} with data: ${JSON.stringify(data)}`;
-      }
+      message = `Local notification ${
+        actionId ? `"${actionId}"` : origin
+      } with data: ${JSON.stringify(data)}`;
+    }
+
+    if (userText) {
+      message += `\nUser provided text: ${userText}.`;
+    } else {
+      message += `\nNo text provided.`;
     }
 
     // Calling alert(message) immediately fails to show the alert on Android
@@ -56,42 +66,69 @@ export default class ExpoApisScreen extends React.Component {
   }
 
   _getApis = () => {
-    return [
-      'AuthSession',
-      'Branch',
-      'Calendars',
-      'Constants',
-      'Contacts',
-      'DocumentPicker',
-      'FacebookLogin',
-      'FileSystem',
-      'Font',
-      'Geocoding',
-      'GoogleLogin',
-      'Haptic',
-      'ImagePicker',
-      'ImageManipulator',
-      'IntentLauncher',
-      'KeepAwake',
-      'LocalAuthentication',
-      'Localization',
-      'Location',
-      'MailComposer',
-      'MediaLibrary',
-      'Notification',
-      'Pedometer',
-      'Permissions',
-      'Print',
-      'MediaLibrary',
-      'ScreenOrientation',
-      'Sensor',
-      'SecureStore',
-      'SMS',
-      'StoreReview',
-      'TextToSpeech',
-      'Util',
-      'WebBrowser',
-      'ViewShot',
-    ];
+    return Platform.select({
+      web: [
+        'AuthSession',
+        'Constants',
+        'DocumentPicker',
+        'FileSystem',
+        'Font',
+        'Geocoding',
+        'Google',
+        'GoogleSignIn',
+        'ImageManipulator',
+        'Localization',
+        'Location',
+        'MailComposer',
+        'Notification',
+        'Permissions',
+        'Print',
+        'ScreenOrientation',
+        'Sensor',
+        'SMS',
+        'TextToSpeech',
+        'Util',
+      ],
+      default: [
+        'AppAuth',
+        'AuthSession',
+        'BackgroundFetch',
+        'Branch',
+        'Calendars',
+        'Constants',
+        'Contacts',
+        'DocumentPicker',
+        'FacebookLogin',
+        'FileSystem',
+        'Font',
+        'Geocoding',
+        'Google',
+        'GoogleSignIn',
+        'Haptic',
+        'ImagePicker',
+        'ImageManipulator',
+        'IntentLauncher',
+        'KeepAwake',
+        'LocalAuthentication',
+        'Localization',
+        'Location',
+        'MailComposer',
+        'Notification',
+        'Pedometer',
+        'Permissions',
+        'Print',
+        'MediaLibrary',
+        'ScreenOrientation',
+        'Sensor',
+        'SecureStore',
+        'SMS',
+        'StoreReview',
+        'TaskManager',
+        'TextToSpeech',
+        'Util',
+        'WebBrowser',
+        'ViewShot',
+      ],
+    });
   };
 }
